@@ -1,8 +1,10 @@
 require 'yaml'
+require 'csv'
 
 class Game
 
     def initialize
+        puts "Current directory: #{Dir.pwd}"
         word_bank = Array.new
         File.open('dictionary.txt','r').each do |line|
             line = line.chomp.downcase
@@ -19,29 +21,56 @@ class Game
         @guessed_letters = Array.new
         @turn_counter = 1
 
-        @already_saved = false
-
-        puts "Welcome to Hangman!"
-        puts
-        puts "Guess the word, letter by letter!"
-        puts "Enter one at a time, and if you get it right,"
-        puts "It will show up at it's correct place in the word!"
-        puts
-        puts "However, if the letter you guess isn't in the word..."
-        puts
-        puts "Thats one strike!"
-        puts
-        puts "You get seven strikes to guess the word! Good Luck and have fun!"
-        puts
-        puts
-        puts 
-        puts @players_array.join(' ')
+        images = File.read("hangman.yaml")
+        @hangman = images.split(',')
 
     end
 
+
+    def game_intro
+        puts "Welcome to Hangman!"
+        puts "Would you like to play a new game, or load a previous one? (n/l)"
+        play = gets.chomp.downcase
+        until play == 'n' or play == 'l'
+            puts "That is not an option, enter either (n)ew or (l)oad."
+            play = gets.chomp.downcase
+        end
+        if play == 'l'
+            Dir.chdir "saves"
+            saves = Dir.glob('*')
+            puts "Current saves: #{saves}"
+            puts "Which game would you like to load?"
+            @selection = gets.chomp.downcase
+            game = File.exists? "#{@selection}"
+            if game == true
+                load_game
+            else
+                puts "There is no game with that name on file."
+                puts "Either enter a new one, or exit to exit."
+            end
+        else
+            puts "Guess the word, letter by letter!"
+            puts "Enter one at a time, and if you get it right,"
+            puts "It will show up at it's correct place in the word!"
+            puts
+            puts "However, if the letter you guess isn't in the word..."
+            puts
+            puts "Thats one strike!"
+            puts
+            puts "You get seven strikes to guess the word! Good Luck and have fun!"
+            puts
+            puts
+            puts 
+        end
+        puts @players_array.join(' ')
+    end
+
     def play_a_game
+        game_intro
         while @turn_counter < 8
             puts "Turn: #{@turn_counter}"
+            puts @hangman[@turn_counter - 1]
+            puts
             retrieve_guess
             update_display
             check_for_win
@@ -51,11 +80,8 @@ class Game
     end
 
     def retrieve_guess
-        puts "Pick a letter!" #Or enter 'save' to save this game to return to later!
+        puts "Pick a letter! Or enter 'save' to save, or 'exit' to exit."
         @guess = gets.chomp.downcase
-        #if @guess == 'save'
-        #    save_game
-        #end
         guess_filter(@guess)
         already_guessed = @guessed_letters.any? { |letter| @guess == letter }
         if already_guessed == true
@@ -70,9 +96,6 @@ class Game
                 puts "Yep! That letter is found in this word!"
             end
         end
-        puts "Letters guessed so far: #{@guessed_letters.join(', ')}"
-        puts
-        puts
 
     end
 
@@ -91,14 +114,20 @@ class Game
                 @players_array[index] = letter
             end
         end
+        puts
+        puts
         puts "Mistakes left: #{8 - @turn_counter}"
         puts @players_array.join(' ')
+        puts "Letters guessed so far: #{@guessed_letters.join(', ')}"
+
     end
 
     def guess_filter(guess)
 
         until @guess.length == 1 and @guess =~ /[a-z]/
-            if @guess == 'exit'
+            if @guess == 'save'
+                save_game
+            elsif @guess == 'exit'
                 exit
             elsif @guess.length == 0
                 puts "You didn't enter anything! If you wish to exit, enter exit."
@@ -112,21 +141,58 @@ class Game
     end
 
     def save_game
-        save_id = 0
-        game_state = YAML::dump(self)
-        if @already_saved == true
-            File.open("save_file#{save_id}", "w").puts game_state
-            puts "Old game overwritten! You're good to go!"
-        else
-            while File.exists? "save_file#{save_id}"
-                save_id += 1
-            end
-            File.new "save_file#{save_id}"
-            puts "New file saved!"
-            @already_saved = true
+        exists = Dir.exists? "saves"
+        if exists == false
+            Dir.mkdir "saves"
         end
+        Dir.chdir "saves"
+        puts "Enter a name for the save file."
+        save_id = gets.chomp.downcase.to_s
+        until save_id != 'exit'
+            puts "You cannot save a file with that name."
+            save_id = gets.chomp.downcase.to_s
+        end
+        game_state = YAML::dump({
+
+            :secret_word => @secret_word,
+            :players_array => @players_array,
+            :turn_counter => @turn_counter,
+            :guessed_letters => @guessed_letters
+        })
+        if File.exists? "#{save_id}"
+            puts "A file already exists with that name, are you sure? (y/n)"
+            confirm = gets.chomp.downcase
+            until confirm == 'y' or confirm == 'n'
+                puts "That is not an option, enter (y)es or (n)o."
+                confirm = gets.chomp.downcase
+            end
+            if confirm == 'y'
+                puts "File overwritten!"
+                save = File.new("#{save_id}", "w+")
+                save.puts game_state
+                save.close
+            end
+        else
+            puts "New file saved!"
+            save = File.new("#{save_id}", "w+")
+            save.puts game_state
+            save.close
+        end
+        puts "Now that we're done with that, enter a new letter, or 'exit' to exit the game."
+        Dir.chdir ".."
+    end
+
+    def load_game
+        puts Dir.getwd
+        game = YAML.load(File.open("#{@selection}", 'r'))
+        @secret_word = game[:secret_word]
+        @secret_array = @secret_word.split('')
+        @players_array = game[:players_array]
+        @guessed_letters = game[:guessed_letters]
+        @turn_counter = game[:turn_counter]
+
     end
 end
 
-game = Game.new
-game.play_a_game
+new_game = Game.new
+new_game.play_a_game
